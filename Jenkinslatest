@@ -1,7 +1,7 @@
-@Library('jenkins-shared-library') _
+@Library('Jenkins_Shared_Library@main') _
 
 pipeline {
-    agent { label 'Slave' }
+    agent any
 
     environment {
         // Access constants from the shared library
@@ -26,7 +26,7 @@ pipeline {
             }
         }
 
-        stage('Logging into AWS ECR') {
+        stage('Login into AWS ECR') {
             steps {
                 script {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: ECR_CREDENTIALS_ID]]) {
@@ -52,7 +52,7 @@ pipeline {
             }
         }
 
-        stage('Building Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 script {
                     sh "docker build -t ${IMAGE_REPO_NAME}:${IMAGE_TAG} ."
@@ -60,15 +60,24 @@ pipeline {
             }
         }
 
-        stage('Tagging Docker Image') {
+        stage('Tag Docker Image') {
             steps {
                 script {
                     sh "docker tag ${IMAGE_REPO_NAME}:${IMAGE_TAG} ${REPOSITORY_URI}:${IMAGE_TAG}"
                 }
             }
         }
+        stage('Run Docker Container') {
+            steps {
+                script {
+                    echo "Running Docker container on port 8080"
+                    // Run the container in detached mode and map port 8080 to the host
+                    sh 'docker run -d -p 8080:8080 --name ${IMAGE_REPO_NAME}-container ${IMAGE_REPO_NAME}:latest'
+                }
+            }
+        }
 
-        stage('Pushing Image to ECR') {
+        stage('Push Image to ECR') {
             steps {
                 script {
                     sh "docker push ${REPOSITORY_URI}:${IMAGE_TAG}"
@@ -76,30 +85,5 @@ pipeline {
             }
         }
 
-        stage('Final Cleanup') {
-            steps {
-                script {
-                    sh "docker rmi -f ${IMAGE_REPO_NAME}:${IMAGE_TAG} || true"
-                    sh "docker rmi -f ${REPOSITORY_URI}:${IMAGE_TAG} || true"
-                }
-            }
-        }
     }
-}
-
-
-Shared Library
-import groovy.transform.Field
-
-@Field String AWS_ACCOUNT_ID = '-'
-@Field String AWS_DEFAULT_REGION = '-'
-@Field String IMAGE_REPO_NAME = '-'
-@Field String GIT_REPO_URL = '-'
-
-// Jenkins Credential IDs
-@Field String GIT_CREDENTIALS_ID = 'Jenkins file name'
-@Field String ECR_CREDENTIALS_ID = 'Jenkins aws-credentials'
-
-def call() {
-    return this
 }
